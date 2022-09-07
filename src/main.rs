@@ -1,104 +1,136 @@
-use anyhow::*;
+#![feature(iterator_try_collect)]
+mod alfred;
+mod config;
+mod db_client;
+mod gh_client;
+mod spawn_daemon;
+use futures::try_join;
+
+use crate::{
+    alfred::AlfredItem, db_client::DBClient, gh_client::GHClient, spawn_daemon::DaemonResult,
+};
 use clap::Parser;
-use graphql_client::{reqwest::post_graphql_blocking as post_graphql, GraphQLQuery};
-// use log::*;
-// use reqwest::blocking::Client;
+use futures::TryStreamExt;
+use spawn_daemon::spawn_daemon;
 
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "./schema.graphql",
-    query_path = "./query.graphql",
-    response_derives = "Debug"
-)]
-struct RepoView;
-
+// Parsed command instructions from the command line
 #[derive(Parser)]
 #[clap(author, about, version)]
-struct Command {
-    #[clap(name = "repository")]
-    repo: String,
+struct GhAlfredCommand {
+    /// pull repositories from GH and cache them into the sqlite db
+    /// This is is mainly useful for testing purpose, as the update will be launched in a
+    /// background daeamon process on regular basis to keep the cache up to date
+    #[clap(long = "update-db")]
+    update_db: bool,
+
+    /// clear the sqlite database
+    #[clap(long = "clear-db")]
+    clear_db: bool,
+
+    /// returns the first 10 Github repositories that match the filter
+    #[clap(name = "filter")]
+    filter: Option<String>,
 }
 
-fn parse_repo_name(repo_name: &str) -> Result<(&str, &str), anyhow::Error> {
-    let mut parts = repo_name.split('/');
-    match (parts.next(), parts.next()) {
-        (Some(owner), Some(name)) => Ok((owner, name)),
-        _ => Err(format_err!("wrong format for the repository name param (we expect something like facebook/graphql)"))
+/// process will be launched in a process daemon fork, and this currently does not play well with
+/// async executors. See https://github.com/tokio-rs/tokio/issues/4301
+#[tokio::main]
+async fn update_db() -> anyhow::Result<()> {
+    log::info!("Update DB");
+
+    // get a Github and DB client
+    let (gh, db) = try_join!(GHClient::create(), DBClient::create())?;
+
+    // stream repositories
+    let repositories = gh.stream_repositories();
+    tokio::pin!(repositories);
+
+    // pipe stream to save repositories into the db
+    let inserts = db.save_all_repositories(repositories);
+    tokio::pin!(inserts);
+
+    // consume the pipe
+    while inserts.try_next().await?.is_some() {
+        log::info!("Update available");
+        // TODO: we could communicate updates to the main process through a unix socket here as an
+        // optimisation in the future
     }
-}
 
-fn main() -> Result<(), anyhow::Error> {
-    env_logger::init();
-
-    let github_api_token =
-        std::env::var("GITHUB_API_TOKEN").expect("Missing GITHUB_API_TOKEN env var");
-
-    let args = Command::parse();
-
-    let repo = args.repo;
-    let (owner, name) = parse_repo_name(&repo).unwrap_or(("tomhoule", "graphql-client"));
-
-    // let variables = repo_view::Variables {
-    //     owner: owner.to_string(),
-    //     name: name.to_string(),
-    // };
-    //
-    // let client = Client::builder()
-    //     .user_agent("graphql-rust/0.10.0")
-    //     .default_headers(
-    //         std::iter::once((
-    //             reqwest::header::AUTHORIZATION,
-    //             reqwest::header::HeaderValue::from_str(&format!("Bearer {}", github_api_token))
-    //                 .unwrap(),
-    //         ))
-    //         .collect(),
-    //     )
-    //     .build()?;
-    //
-    // let response_body =
-    //     post_graphql::<RepoView, _>(&client, "https://api.github.com/graphql", variables).unwrap();
-    //
-    // info!("{:?}", response_body);
-    //
-    // let response_data: repo_view::ResponseData = response_body.data.expect("missing response data");
-    //
-    // let stars: Option<i64> = response_data
-    //     .repository
-    //     .as_ref()
-    //     .map(|repo| repo.stargazers.total_count);
-    //
-    // println!("{}/{} - 🌟 {}", owner, name, stars.unwrap_or(0),);
-    //
-    // let mut table = prettytable::Table::new();
-    // table.set_format(*prettytable::format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
-    // table.set_titles(row!(b => "issue", "comments"));
-    //
-    // for issue in response_data
-    //     .repository
-    //     .expect("missing repository")
-    //     .issues
-    //     .nodes
-    //     .expect("issue nodes is null")
-    //     .iter()
-    //     .flatten()
-    // {
-    //     table.add_row(row!(issue.title, issue.comments.total_count));
-    // }
-    //
-    // table.printstd();
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Execute the clear-db command
+#[tokio::main]
+async fn clear_db() -> anyhow::Result<()> {
+    log::info!("Clear DB");
+    let db = DBClient::create().await?;
+    config::GhAlfredConfig::load()?.reset_last_update_start_time()?;
+    db.clear().await
+}
 
-    #[test]
-    fn parse_repo_name_works() {
-        assert_eq!(
-            parse_repo_name("graphql-rust/graphql-client").unwrap(),
-            ("graphql-rust", "graphql-client")
-        );
-        assert!(parse_repo_name("abcd").is_err());
+/// Execute the search command
+#[tokio::main]
+async fn search_repositories(filter: String) -> anyhow::Result<()> {
+    log::info!("Search DB with {:?}", filter);
+
+    let db = DBClient::create().await?;
+
+    let mut repositories = db.search_repositories(&filter).await?.collect::<Vec<_>>();
+
+    // if we don't have any results we search on GH instead
+    if repositories.is_empty() {
+        let gh = GHClient::create().await?;
+        repositories = gh.search_repositories(&filter).await?.collect();
     }
+
+    let results = repositories
+        .into_iter()
+        .map(|title| AlfredItem { title })
+        .collect::<Vec<_>>();
+
+    println!("{}", serde_json::to_string(&results)?);
+    Ok(())
+}
+
+fn main() -> Result<(), anyhow::Error> {
+    // load .env file
+    dotenvy::dotenv()?;
+
+    // parse the filter string from the command line
+    let args = GhAlfredCommand::parse();
+
+    // initialize logger
+    let _logger = flexi_logger::Logger::try_with_env()?
+        .log_to_file(flexi_logger::FileSpec::default().suppress_timestamp())
+        .start()?;
+
+    // execute specified command and return
+    if args.update_db {
+        return update_db();
+    } else if args.clear_db {
+        return clear_db();
+    }
+
+    // When we execute the default command (filter repositories results), we will first check
+    // weather or not we need to spawn a daemon in the background to populate the DB
+
+    // read the program config
+    let mut config = config::GhAlfredConfig::load()?;
+
+    // check weather or not we should update the db in the background
+    if config.should_update_db() {
+        log::info!("config outdated, starting db-update daemon");
+        config.update_last_update_start_time()?;
+        if let DaemonResult::Daemon = spawn_daemon() {
+            return update_db();
+        }
+    } else {
+        log::info!("config up to date, no update triggered {:?}", config);
+    }
+
+    if let Some(filter) = args.filter {
+        return search_repositories(filter);
+    }
+
+    Ok(())
 }

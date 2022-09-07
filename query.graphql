@@ -1,4 +1,6 @@
-query Repos($after: String) {
+# paged query to access all repositories linked to my user
+# Test it with https://docs.github.com/en/graphql/overview/explorer
+query RepoView($after: String) {
   viewer {
     repositories(
       first: 100
@@ -15,5 +17,11 @@ query Repos($after: String) {
         hasNextPage
       }
     }
+  }
+  rateLimit {
+    limit
+    cost
+    remaining
+    resetAt
   }
 }
