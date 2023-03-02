@@ -11,10 +11,12 @@ pub struct DBClient {
     pool: SqlitePool,
 }
 
+/// event emitted when the database is updated
 #[derive(Default, Debug, Clone)]
 pub struct DBUpdateEvent;
 
 impl DBClient {
+    /// create a new DB client
     pub async fn create() -> anyhow::Result<Self> {
         let url = &env::var("DATABASE_URL")?;
 
@@ -26,6 +28,7 @@ impl DBClient {
         Ok(Self { pool })
     }
 
+    /// clear the database
     pub async fn clear(&self) -> anyhow::Result<()> {
         let sql = sqlx::query!("DELETE FROM repos");
         sql.execute(&self.pool).await?;
@@ -48,7 +51,7 @@ impl DBClient {
         }))
     }
 
-    /// Search crattes matching the given query string
+    /// Search crates matching the given query string
     pub async fn search_crates(
         &self,
         filter: &str,
@@ -85,6 +88,7 @@ impl DBClient {
         Ok(())
     }
 
+    /// save all repositories from the passed stream
     pub fn save_all_repositories<'a>(
         &'a self,
         mut src: impl Stream<Item = anyhow::Result<Vec<String>>> + std::marker::Unpin + 'a,

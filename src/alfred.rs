@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use crate::{crate_client::CrateSearchItem, gh_client::GHApiRepoSearchItem};
 
+/// a result item for Alfred
 #[derive(Serialize, Default)]
 pub struct AlfredItem {
     /// The title displayed in the result row
@@ -23,6 +24,7 @@ impl From<GHApiRepoSearchItem> for AlfredItem {
         }
     }
 }
+
 impl From<CrateSearchItem> for AlfredItem {
     fn from(value: CrateSearchItem) -> Self {
         Self { title: value.name }

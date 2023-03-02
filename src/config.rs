@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_CONFIG_NAME: &str = "gh_alfred";
 
+/// stored configuration for gh_alfred
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct GhAlfredConfig {
     /// The last time we spawned a daemon fork to update the cache

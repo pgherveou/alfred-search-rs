@@ -1,21 +1,25 @@
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 
+/// client to read from crates.io api
 pub struct CrateClient {
     client: reqwest::Client,
 }
 
+/// response from the crates.io search API
 #[derive(Deserialize)]
 struct CrateSearchResponse {
     crates: Vec<CrateSearchItem>,
 }
 
+/// response item from the crates.io search API
 #[derive(Deserialize)]
 pub struct CrateSearchItem {
     pub name: String,
 }
 
 impl CrateClient {
+    /// create a new crates.io client
     pub async fn create() -> anyhow::Result<Self> {
         let default_headers =
             HeaderMap::from_iter([(header::ACCEPT, HeaderValue::from_static("application/json"))]);
@@ -28,6 +32,7 @@ impl CrateClient {
         Ok(Self { client })
     }
 
+    /// search for crates matching the given filter
     pub async fn search_crate(&self, filter: &str) -> anyhow::Result<Vec<CrateSearchItem>> {
         log::info!("querying crates.io crate matching {filter}");
         let response = self
