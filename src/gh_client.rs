@@ -1,4 +1,4 @@
-//! Github client used to access various GH API datasources
+//! Github client used to query Github api
 use std::time::Duration;
 
 use crate::gh_client::repo_view::RepoViewRateLimit;

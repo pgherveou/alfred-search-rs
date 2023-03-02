@@ -1,4 +1,4 @@
-//! Simple configuration file used to persist state between consecutive launches
+//! Manage the persisted configuration of gh_alfred
 use confy::ConfyError;
 use serde::{Deserialize, Serialize};
 

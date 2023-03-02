@@ -1,7 +1,8 @@
+//! Client to query the crates.io API
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 
-/// client to read from crates.io api
+/// A crate.io client
 pub struct CrateClient {
     client: reqwest::Client,
 }

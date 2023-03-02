@@ -1,3 +1,4 @@
+//! Client to interact with the Sqlite database
 use anyhow::Context;
 use futures::{Stream, TryStreamExt};
 use sqlx::{ConnectOptions, QueryBuilder, SqlitePool};

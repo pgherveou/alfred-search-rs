@@ -1,3 +1,4 @@
+//! Utilities to spawn a daemon
 use nix::unistd::{fork, setsid, ForkResult};
 
 /// Defines which branch of the fork we are on
