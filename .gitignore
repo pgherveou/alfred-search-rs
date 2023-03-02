@@ -2,4 +2,4 @@
 .env
 gh-alfred-rust.log
 .DS_Store
-db
+db/*
