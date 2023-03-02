@@ -44,9 +44,11 @@ impl CrateClient {
             .await?;
 
         if !response.status().is_success() {
-            log::error!("search crate failed with status {}", response.status());
-            let err_msg = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("search crate failed: {err_msg}"));
+            return Err(anyhow::format_err!(
+                "Failed to search crate: {}, {}",
+                response.status(),
+                response.text().await.unwrap_or_default()
+            ));
         }
 
         let crates = response.json::<CrateSearchResponse>().await?.crates;

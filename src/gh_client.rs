@@ -83,7 +83,7 @@ impl GHClient {
         query: &str,
     ) -> anyhow::Result<Vec<GHApiRepoSearchItem>> {
         log::info!("querying api.github.com for repos matching {query}");
-        let items = self
+        let response = self
             .client
             .get("https://api.github.com/search/repositories")
             .query(&[
@@ -93,10 +93,17 @@ impl GHClient {
                 ("q", query),
             ])
             .send()
-            .await?
-            .json::<GHApiRepoSearchResponse>()
-            .await?
-            .items;
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::format_err!(
+                "Failed to search repositories: {}, {}",
+                response.status(),
+                response.text().await.unwrap_or_default()
+            ));
+        }
+
+        let items = response.json::<GHApiRepoSearchResponse>().await?.items;
 
         Ok(items)
     }
