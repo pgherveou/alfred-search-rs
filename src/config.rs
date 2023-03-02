@@ -1,8 +1,8 @@
-//! Manage the persisted configuration of gh_alfred
+//! Manage the persisted configuration of the cli
 use confy::ConfyError;
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_CONFIG_NAME: &str = "gh_alfred";
+const DEFAULT_CONFIG_NAME: &str = env!("CARGO_PKG_NAME");
 
 /// stored configuration for gh_alfred
 #[derive(Default, Debug, Serialize, Deserialize)]

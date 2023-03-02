@@ -38,6 +38,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "alfred-search-rs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "chrono",
+ "clap",
+ "confy",
+ "dotenvy",
+ "env_logger",
+ "flexi_logger",
+ "fork",
+ "futures",
+ "graphql_client",
+ "log",
+ "nix",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,31 +694,6 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
-]
-
-[[package]]
-name = "alfred-search-rs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "chrono",
- "clap",
- "confy",
- "dotenvy",
- "env_logger",
- "flexi_logger",
- "fork",
- "futures",
- "graphql_client",
- "log",
- "nix",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
