@@ -3,6 +3,8 @@ use futures::{Stream, TryStreamExt};
 use sqlx::{ConnectOptions, QueryBuilder, SqlitePool};
 use std::{env, str::FromStr};
 
+use crate::{crate_client::CrateSearchItem, gh_client::GHApiRepoSearchItem};
+
 /// Utility struct to read / write from the Sqlite database
 #[derive(Clone)]
 pub struct DBClient {
@@ -19,10 +21,7 @@ impl DBClient {
         let mut options = sqlx::sqlite::SqliteConnectOptions::from_str(url)?;
         options.disable_statement_logging();
 
-        // let pool = SqlitePool::connect(&env::var("DATABASE_URL")?)
-        let pool = SqlitePool::connect_with(options)
-            .await
-            .expect("Failed to open DB connection");
+        let pool = SqlitePool::connect_with(options).await?;
 
         Ok(Self { pool })
     }
@@ -33,18 +32,36 @@ impl DBClient {
         Ok(())
     }
 
-    /// Read results that match the given filter
+    /// Search repositories matching the given query string
     pub async fn search_repositories(
         &self,
         filter: &str,
-    ) -> anyhow::Result<impl Iterator<Item = String>> {
-        log::debug!("filter rows with {:?}", filter);
+    ) -> anyhow::Result<impl Iterator<Item = GHApiRepoSearchItem>> {
+        log::debug!("search repositories matching {filter}");
         let filter = format!("%{}%", filter);
         let recs = sqlx::query!("SELECT name FROM repos WHERE name like ? LIMIT 5", filter) // filter
             .fetch_all(&self.pool)
             .await?;
 
-        Ok(recs.into_iter().map(|repo| repo.name))
+        Ok(recs.into_iter().map(|repo| GHApiRepoSearchItem {
+            full_name: repo.name,
+        }))
+    }
+
+    /// Search crattes matching the given query string
+    pub async fn search_crates(
+        &self,
+        filter: &str,
+    ) -> anyhow::Result<impl Iterator<Item = CrateSearchItem>> {
+        log::debug!("search crates matching {filter}");
+        let filter = format!("%{}%", filter);
+        let recs = sqlx::query!("SELECT name FROM crates WHERE name like ? LIMIT 5", filter)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(recs
+            .into_iter()
+            .map(|repo| CrateSearchItem { name: repo.name }))
     }
 
     /// Save the passed repositories

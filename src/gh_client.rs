@@ -5,6 +5,7 @@ use crate::gh_client::repo_view::RepoViewRateLimit;
 use anyhow::Context;
 use chrono::Utc;
 use graphql_client::{reqwest::post_graphql, GraphQLQuery};
+use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 use tokio_stream::Stream;
 
@@ -47,8 +48,8 @@ struct GHApiRepoSearchResponse {
 /// see [API doc](https://docs.github.com/en/rest/search#search-repositories)
 /// to parse more fields returned by the API
 #[derive(Deserialize)]
-struct GHApiRepoSearchItem {
-    full_name: String,
+pub struct GHApiRepoSearchItem {
+    pub full_name: String,
 }
 
 impl GHClient {
@@ -56,15 +57,21 @@ impl GHClient {
     /// API calls
     pub async fn create() -> anyhow::Result<Self> {
         let token = &std::env::var("GITHUB_API_TOKEN")?;
+
+        let default_headers = HeaderMap::from_iter([
+            (
+                header::AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", token))?,
+            ),
+            (
+                header::ACCEPT,
+                HeaderValue::from_static("application/vnd.github+json"),
+            ),
+        ]);
+
         let client = reqwest::Client::builder()
             .user_agent("graphql-rust/0.10.0")
-            .default_headers(
-                std::iter::once((
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))?,
-                ))
-                .collect(),
-            )
+            .default_headers(default_headers)
             .build()?;
 
         Ok(Self { client })
@@ -74,8 +81,9 @@ impl GHClient {
     pub async fn search_repositories(
         &self,
         query: &str,
-    ) -> anyhow::Result<impl Iterator<Item = String>> {
-        let repos = self
+    ) -> anyhow::Result<Vec<GHApiRepoSearchItem>> {
+        log::info!("querying api.github.com for repos matching {query}");
+        let items = self
             .client
             .get("https://api.github.com/search/repositories")
             .query(&[
@@ -84,16 +92,13 @@ impl GHClient {
                 ("order", "desc"),
                 ("q", query),
             ])
-            .header("acept", "application/vnd.github+json")
             .send()
             .await?
             .json::<GHApiRepoSearchResponse>()
             .await?
-            .items
-            .into_iter()
-            .map(|item| item.full_name);
+            .items;
 
-        Ok(repos)
+        Ok(items)
     }
 
     /// fetch one page of result from the repositories graphlql query, starting after the given
@@ -184,12 +189,3 @@ impl GHClient {
         })
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn parse_repo_name_works() {
-//     }
-// }
